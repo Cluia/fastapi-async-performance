@@ -2,7 +2,7 @@
 
 # fastapi-async-performance
 
-**Small, sharp demo: async FastAPI + strict Pydantic + Gunicorn/Uvicorn in Docker.**
+**Async FastAPI demo: strict telemetry validation, Docker, and automated quality checks.**
 
 [![CI](https://github.com/Cluia/fastapi-async-performance/actions/workflows/ci.yml/badge.svg)](https://github.com/Cluia/fastapi-async-performance/actions/workflows/ci.yml)
 
@@ -10,16 +10,35 @@
 
 ---
 
-## What this is
+## Why this application exists
 
-A **telemetry-style ingestion API** (IoT-friendly naming) with:
+Edge devices and gateways (sensors, PLCs, IoT nodes) often send **bursts of readings** to a central service. Before those readings are stored, routed to analytics, or forwarded to a queue, something must **validate them quickly** and reject garbage early—without blocking the whole pipeline on a single slow row.
+
+This project is a **small, self-contained API** that models that first hop:
+
+- Accept a **batch of sensor readings** in one HTTP request.
+- Apply **strict schema rules** (types, allowed metrics, plausible ranges, no unknown fields).
+- Run **per-row checks concurrently** with `async/await`, so the handler stays responsive under load.
+
+It deliberately **does not** include a database, Redis, or Celery. That keeps the repository easy to read in one sitting and isolates **“fast validation at the edge”** from distributed processing (covered in sibling portfolio repos such as a full log/telemetry pipeline).
+
+**Typical use cases this demo represents**
+
+| Scenario | What this API stands in for |
+|----------|----------------------------|
+| Factory / lab telemetry | Gateways posting temperature, humidity, or pressure samples. |
+| Pre-ingest filter | A service that returns **202 Accepted** only when a batch is structurally valid. |
+| Portfolio / interview piece | Proof of async FastAPI, Pydantic v2 discipline, Docker, pytest, and CI—not a production product by itself. |
+
+---
+
+## What is in the box
 
 - **100% async** route handlers (`async def`).
 - **Pydantic v2** models with `extra="forbid"`, field bounds, and cross-field checks.
-- **Concurrent per-row checks** via `asyncio.gather` (pattern you keep when later adding real I/O).
-- **Production-shaped container**: **Gunicorn** + **Uvicorn workers** (multi-process), slim **Dockerfile** (no database client build chain).
-
-No Redis, Postgres, or Celery—this repo is intentionally **atomic** so reviewers can read it in one sitting.
+- **Concurrent per-row validation** via `asyncio.gather` (ready to swap in real I/O later).
+- **Docker Compose** with a healthcheck on `/health`.
+- **GitHub Actions**: Black, Flake8, pytest with coverage gate, Docker image build.
 
 ---
 
@@ -67,12 +86,6 @@ Response **202** with `accepted` count when both Pydantic validation and async c
 
 ---
 
-## Why Gunicorn + Uvicorn here
-
-Same pattern as larger Python API services: **Gunicorn** manages worker processes; each worker runs **Uvicorn**’s ASGI stack so `async def` endpoints and `asyncio` stay first-class. This image is a reusable baseline for other micro-repos.
-
----
-
 ## Testing
 
 ### How to run
@@ -96,10 +109,10 @@ pytest -v --cov=app --cov-report=term-missing --cov-fail-under=92
 pytest --cov=app --cov-report=html
 ```
 
-On **Windows (PowerShell)**:
+On **Windows (PowerShell)** — from the repository root (the folder created by `git clone`):
 
 ```powershell
-cd C:\Users\julio\StudioProjects\fastapi-async-performance
+.\.venv\Scripts\Activate.ps1   # if you created a venv in Quick start
 pip install -r requirements-dev.txt
 pytest -v --cov=app --cov-report=term-missing --cov-fail-under=92
 ```
@@ -116,21 +129,9 @@ flake8 app tests
 | Where | What you see |
 |-------|----------------|
 | **Terminal** | `pytest -v` lists each `test_*` with PASSED/FAILED and tracebacks on failure. |
-| **IDE (Cursor / VS Code)** | Open the `tests/` folder; use *Run Test* / Testing sidebar on any `test_…` function. |
+| **IDE** | Open the `tests/` folder; use *Run Test* / Testing sidebar on any `test_…` function. |
 | **`htmlcov/index.html`** | Line-by-line coverage after `pytest --cov=app --cov-report=html`. |
 | **GitHub Actions** | Tab *Actions* on the repo: each run shows lint, pytest+coverage, and Docker build. |
-
-### Test modules (what runs)
-
-| File | What is exercised |
-|------|-------------------|
-| `tests/conftest.py` | Shared **`async_client`** fixture: httpx `AsyncClient` + `ASGITransport` against the real FastAPI app. |
-| `tests/test_routes_health.py` | `GET /health`, `GET /openapi.json` (paths exist), `GET /docs` (Swagger UI loads). |
-| `tests/test_routes_telemetry.py` | `POST /telemetry/ingest`: 202 shape, boundary metrics, `recorded_at`, whitespace on `source`, many **422** bodies (missing fields, extra keys, bad metric, out-of-range values, >2000 readings), **2000** readings accepted, `blocked-*` sensor + detail, invalid JSON body, **24 concurrent** ingests. |
-| `tests/test_models_telemetry.py` | Pydantic **`SensorReading` / `TelemetryIngest`** without HTTP (unknown metric, long `source`, `sensor_id` length 128 vs 129). |
-| `tests/test_schema_value_branches.py` | **`value_plausible`** branches: temperature, humidity, pressure, `custom` out of range. |
-| `tests/test_validation_service.py` | **`validate_reading_async`** / **`validate_batch_concurrent`** (success, blocked id, batch of 50, error propagation). |
-| `tests/test_lifespan_starlette.py` | ASGI **lifespan** startup/shutdown via Starlette **`TestClient`** (not only httpx async transport). |
 
 ### What problems the suite guards against
 
@@ -159,10 +160,5 @@ flake8 app tests
 
 ## Relation to other work
 
-This repository was bootstrapped as a **focused slice** of patterns used in larger “log pipeline” style projects: FastAPI layout, Docker healthcheck, GitHub Actions (lint + test + image build), and English README—**without** queue or persistence complexity.
+This repository is a **focused slice** of patterns used in larger “log pipeline” style projects: FastAPI layout, Docker healthcheck, GitHub Actions (lint + test + image build)—**without** queue or persistence complexity.
 
----
-
-## License
-
-Add a license file when you publish (e.g. MIT).
