@@ -160,5 +160,9 @@ flake8 app tests
 
 ## Relation to other work
 
+<<<<<<< HEAD
 This repository is a **focused slice** of patterns used in larger “log pipeline” style projects: FastAPI layout, Docker healthcheck, GitHub Actions (lint + test + image build)—**without** queue or persistence complexity.
+=======
+This repository was bootstrapped as a **focused slice** of patterns used in larger “log pipeline” style projects: FastAPI layout, Docker healthcheck, GitHub Actions (lint + test + image build) —**without** queue or persistence complexity.
+>>>>>>> 109706fd0dfd8f08f1f1655c00702d770814db2c
 
