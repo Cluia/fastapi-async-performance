@@ -73,11 +73,35 @@ Same pattern as larger Python API services: **Gunicorn** manages worker processe
 
 ---
 
+## Testing
+
+The suite is split by concern:
+
+| Module | Focus |
+|--------|--------|
+| `test_routes_health.py` | `/health`, `/openapi.json`, `/docs` |
+| `test_routes_telemetry.py` | HTTP contract for ingest: happy paths, 422 cases, invalid JSON, max batch (2000), concurrency |
+| `test_models_telemetry.py` | Pydantic models without HTTP |
+| `test_schema_value_branches.py` | Validator branches per metric type |
+| `test_validation_service.py` | `asyncio.gather` validation service |
+| `test_lifespan_starlette.py` | ASGI lifespan via Starlette `TestClient` |
+| `conftest.py` | Shared `async_client` fixture (httpx async) |
+
+**Coverage gate (CI + local):** `pytest` runs with `--cov=app --cov-fail-under=92` (currently **100%** line coverage on `app/`).
+
+```bash
+pip install -r requirements-dev.txt
+pytest -v --cov=app --cov-report=term-missing --cov-fail-under=92
+```
+
+---
+
 ## Development
 
 | Command | Purpose |
 |---------|---------|
-| `pytest -v` | Tests (httpx `AsyncClient` + `ASGITransport`) |
+| `pytest -v` | Full test suite |
+| `pytest -v --cov=app --cov-fail-under=92` | Tests + coverage gate |
 | `black --check app tests` | Format check |
 | `flake8 app tests` | Lint |
 

@@ -11,3 +11,5 @@ build/
 .env
 .idea/
 .vscode/
+.coverage
+htmlcov/

@@ -27,8 +27,8 @@ jobs:
       - name: Flake8
         run: flake8 app tests
 
-      - name: Pytest
-        run: pytest -v --tb=short
+      - name: Pytest with coverage
+        run: pytest -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=92
 
   docker-build:
     runs-on: ubuntu-latest
