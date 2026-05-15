@@ -75,24 +75,74 @@ Same pattern as larger Python API services: **Gunicorn** manages worker processe
 
 ## Testing
 
-The suite is split by concern:
+### How to run
 
-| Module | Focus |
-|--------|--------|
-| `test_routes_health.py` | `/health`, `/openapi.json`, `/docs` |
-| `test_routes_telemetry.py` | HTTP contract for ingest: happy paths, 422 cases, invalid JSON, max batch (2000), concurrency |
-| `test_models_telemetry.py` | Pydantic models without HTTP |
-| `test_schema_value_branches.py` | Validator branches per metric type |
-| `test_validation_service.py` | `asyncio.gather` validation service |
-| `test_lifespan_starlette.py` | ASGI lifespan via Starlette `TestClient` |
-| `conftest.py` | Shared `async_client` fixture (httpx async) |
-
-**Coverage gate (CI + local):** `pytest` runs with `--cov=app --cov-fail-under=92` (currently **100%** line coverage on `app/`).
+From the repository root, install dev dependencies and run pytest:
 
 ```bash
 pip install -r requirements-dev.txt
+pytest -v
+```
+
+**With coverage** (same gate as CI: minimum **92%** on `app/`; the suite currently reaches **100%** line coverage):
+
+```bash
 pytest -v --cov=app --cov-report=term-missing --cov-fail-under=92
 ```
+
+**HTML coverage report** (open `htmlcov/index.html` in a browser after generation):
+
+```bash
+pytest --cov=app --cov-report=html
+```
+
+On **Windows (PowerShell)**:
+
+```powershell
+cd C:\Users\julio\StudioProjects\fastapi-async-performance
+pip install -r requirements-dev.txt
+pytest -v --cov=app --cov-report=term-missing --cov-fail-under=92
+```
+
+**Style checks** (also run in CI):
+
+```bash
+black --check app tests
+flake8 app tests
+```
+
+### How to visualize
+
+| Where | What you see |
+|-------|----------------|
+| **Terminal** | `pytest -v` lists each `test_*` with PASSED/FAILED and tracebacks on failure. |
+| **IDE (Cursor / VS Code)** | Open the `tests/` folder; use *Run Test* / Testing sidebar on any `test_…` function. |
+| **`htmlcov/index.html`** | Line-by-line coverage after `pytest --cov=app --cov-report=html`. |
+| **GitHub Actions** | Tab *Actions* on the repo: each run shows lint, pytest+coverage, and Docker build. |
+
+### Test modules (what runs)
+
+| File | What is exercised |
+|------|-------------------|
+| `tests/conftest.py` | Shared **`async_client`** fixture: httpx `AsyncClient` + `ASGITransport` against the real FastAPI app. |
+| `tests/test_routes_health.py` | `GET /health`, `GET /openapi.json` (paths exist), `GET /docs` (Swagger UI loads). |
+| `tests/test_routes_telemetry.py` | `POST /telemetry/ingest`: 202 shape, boundary metrics, `recorded_at`, whitespace on `source`, many **422** bodies (missing fields, extra keys, bad metric, out-of-range values, >2000 readings), **2000** readings accepted, `blocked-*` sensor + detail, invalid JSON body, **24 concurrent** ingests. |
+| `tests/test_models_telemetry.py` | Pydantic **`SensorReading` / `TelemetryIngest`** without HTTP (unknown metric, long `source`, `sensor_id` length 128 vs 129). |
+| `tests/test_schema_value_branches.py` | **`value_plausible`** branches: temperature, humidity, pressure, `custom` out of range. |
+| `tests/test_validation_service.py` | **`validate_reading_async`** / **`validate_batch_concurrent`** (success, blocked id, batch of 50, error propagation). |
+| `tests/test_lifespan_starlette.py` | ASGI **lifespan** startup/shutdown via Starlette **`TestClient`** (not only httpx async transport). |
+
+### What problems the suite guards against
+
+| Risk area | How tests help |
+|-----------|----------------|
+| **HTTP contract regressions** | Wrong status codes or JSON shape on `/health` and `/telemetry/ingest` (e.g. 202 vs 422). |
+| **Bad or malicious payloads** | Extra JSON keys, empty `source`, empty `readings`, unknown `metric`, numeric out of domain, oversized batches. |
+| **Async pipeline bugs** | `blocked-*` rule after Pydantic; `asyncio.gather` still raises when one row fails; concurrent posts do not trivially break the handler. |
+| **Schema drift** | Direct model tests catch tightening/loosening of Pydantic rules before they hit integration. |
+| **OpenAPI / docs broken** | Ensures the app still exposes spec and UI (common regression after router refactors). |
+| **Lifespan / startup hooks** | `TestClient` context runs lifespan—catches mistakes in `lifespan` that async-only client might not exercise. |
+| **Untested new code** | **`--cov-fail-under=92`** fails CI if coverage drops below the threshold. |
 
 ---
 
